@@ -17,6 +17,8 @@ const BASE_URL = `https://openapi.tuyaeu.com`;
 
 let accessToken = null;
 let lastState = null;
+let lastChangeAt = null;
+
 
 /* ===== TUYA AUTH ===== */
 async function getAccessToken() {
@@ -118,6 +120,26 @@ async function sendTG(text) {
   console.log('Sended')
 }
 
+function formatDate(ts) {
+  const d = new Date(ts);
+  const pad = (n) => n.toString().padStart(2, "0");
+
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function formatDuration(ms) {
+  const totalMinutes = Math.floor(ms / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  let res = "";
+  if (hours > 0) res += `${hours} годин `;
+  res += `${minutes} хвилин`;
+
+  return res.trim();
+}
+
+
 /* ===== MAIN LOOP ===== */
 async function checkPower() {
   try {
@@ -126,26 +148,42 @@ async function checkPower() {
     }
 
     const online = await getDeviceOnlineStatus();
-    
+    const now = Date.now();
+
     if (lastState === null) {
       lastState = online;
+      lastChangeAt = now;
       return;
     }
 
     if (online !== lastState) {
-      lastState = online;
+      const duration = now - lastChangeAt;
+      const durationText = formatDuration(duration);
+      const dateText = formatDate(now);
 
-      await sendTG(
-        online
-          ? "✅ Світло вдома зʼявилось"
-          : "❌ Світло вдома пропало"
-      );
+      lastState = online;
+      lastChangeAt = now;
+
+      if (online) {
+        await sendTG(
+          `✅ Електропостачання ВІДНОВЛЕНО!\n` +
+          `📆 ${dateText}\n\n` +
+          `🌚 ${durationText}`
+        );
+      } else {
+        await sendTG(
+          `🅾️ Електропостачання призупинено\n` +
+          `📆 ${dateText}\n\n` +
+          `🌝 ${durationText}`
+        );
+      }
     }
   } catch (err) {
     console.error("Error:", err.response?.data || err.message);
     accessToken = null;
   }
 }
+
 
 setInterval(checkPower, POLL_INTERVAL);
 console.log("🔌 Tuya power monitor started");
